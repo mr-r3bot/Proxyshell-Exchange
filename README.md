@@ -10,4 +10,7 @@ Usage
 
 ```
 python proxyshell.py -u https://<exchange_server> -e <email> -p <local_wsman_port>
+
+...
+PS> get_shell
 ```
