@@ -4,3 +4,10 @@ Full write-up will be published here: https://mr-r3bot.github.io/researches/2021
 
 - Poc script for ProxyShell exploit chain in Exchange Server
 - Status: working on stage 3
+
+------------
+Usage
+
+```
+python proxyshell.py -u https://<exchange_server> -e <email> -p <local_wsman_port>
+```

